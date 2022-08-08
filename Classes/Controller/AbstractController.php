@@ -193,6 +193,7 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
         $this->currentPageUid = $GLOBALS['TSFE']->id;
         $this->configurationManager = $this->objectManager->get('TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface');
 
+
     }
 
     /**
@@ -215,6 +216,7 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
             'extConf' => $this->extConf,
             'currentPageUid' => $this->currentPageUid
         ));
+
 
     }
 
