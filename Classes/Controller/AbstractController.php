@@ -1,4 +1,5 @@
 <?php
+
 namespace PITS\PitsDownloadcenter\Controller;
 
 /***************************************************************
@@ -26,24 +27,31 @@ namespace PITS\PitsDownloadcenter\Controller;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use PITS\PitsDownloadcenter\Domain\Repository\CategoryRepository;
+use PITS\PitsDownloadcenter\Domain\Repository\DownloadRepository;
+use PITS\PitsDownloadcenter\Domain\Repository\FiletypeRepository;
+use TYPO3\CMS\Core\Resource\ResourceFactory;
+use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
+use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 
 /**
  * AbstractController
  */
 abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
 {
-	/**
+    /**
      * downloadRepository
      *
-     * @var \PITS\PitsDownloadcenter\Domain\Repository\DownloadRepository
+     * @var DownloadRepository
      */
     protected $downloadRepository = NULL;
 
     /**
      * fileTypeRepository
      *
-     * @var \PITS\PitsDownloadcenter\Domain\Repository\FiletypeRepository
+     * @var FiletypeRepository
      */
     protected $fileTypeRepository = NULL;
 
@@ -72,7 +80,7 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     protected $controllerSettings = array();
 
     /**
-     * @var \TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager
+     * @var PersistenceManager
      */
     protected $persistenceManager = NULL;
 
@@ -84,7 +92,7 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     /**
      * @var string
      */
-    protected $encryptionKey; 
+    protected $encryptionKey;
 
     /**
      * @var string
@@ -105,16 +113,23 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     /**
      * categoryRepository
      *
-     * @var \PITS\PitsDownloadcenter\Domain\Repository\CategoryRepository
+     * @var CategoryRepository
      */
     protected $categoryRepository = NULL;
 
     /**
      * storageRepository
      *
-     * @var \TYPO3\CMS\Core\Resource\StorageRepository
+     * @var StorageRepository
      */
     protected $storageRepository = NULL;
+
+
+    /**
+     * @var ResourceFactory
+     */
+    protected $resourceFactory = null;
+
 
     /**
      * datetime
@@ -123,15 +138,29 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
      */
     protected $dateTime = null;
 
-    public function __construct()
+    //JB: get rid of object manager via dependency injection. also inject resourceFactory
+    public function __construct(
+        DownloadRepository $downloadRepository,
+        FiletypeRepository $fileTypeRepository,
+        CategoryRepository $categoryRepository,
+        PersistenceManager $persistenceManager,
+        StorageRepository  $storageRepository,
+        ResourceFactory    $resourceFactory
+    )
     {
-        $objectManager = GeneralUtility::makeInstance('TYPO3\\CMS\Extbase\\Object\\ObjectManager');
-        $this->downloadRepository = $objectManager->get('PITS\\PitsDownloadcenter\\Domain\\Repository\\DownloadRepository');
-        $this->fileTypeRepository = $objectManager->get('PITS\\PitsDownloadcenter\\Domain\\Repository\\FiletypeRepository');
-        $this->categoryRepository = $objectManager->get('PITS\\PitsDownloadcenter\\Domain\\Repository\\CategoryRepository');
-        $this->persistenceManager = $objectManager->get('TYPO3\\CMS\\Extbase\\Persistence\\Generic\\PersistenceManager');
-        $this->storageRepository = $objectManager->get('TYPO3\\CMS\\Core\\Resource\\StorageRepository');
+        $this->downloadRepository = $downloadRepository;
+        $this->fileTypeRepository = $fileTypeRepository;
+        $this->categoryRepository = $categoryRepository;
+        $this->persistenceManager = $persistenceManager;
+        $this->storageRepository = $storageRepository;
+        $this->resourceFactory = $resourceFactory;
+    }
 
+
+    //JB: polyfill function for '$this->request->getBaseUri()', which is deprecated
+    protected function getBaseUrl()
+    {
+        return $GLOBALS['TYPO3_REQUEST']->getAttribute('normalizedParams')->getSiteUrl();
     }
 
     /**
@@ -150,21 +179,22 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
         // Basic Configuration Variables
         $this->extensionName = $this->request->getControllerExtensionName();
         $this->dateTime = new \DateTime('now', new \DateTimeZone('Europe/Berlin'));
-        if(version_compare(TYPO3_version, '8.7.99', '<=')){
-            $this->extConf = unserialize($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf'][GeneralUtility::camelCaseToLowerCaseUnderscored($this->extensionName)]);
-        }
-        else{
-            $this->extConf = $GLOBALS['TYPO3_CONF_VARS']['EXTENSIONS'][GeneralUtility::camelCaseToLowerCaseUnderscored($this->extensionName)];
-        }
+
+        //JB: remove deprecated TYPO3-version comparison
+        $this->extConf = $GLOBALS['TYPO3_CONF_VARS']['EXTENSIONS'][GeneralUtility::camelCaseToLowerCaseUnderscored($this->extensionName)];
+
 
         // Encryption Variables
         $this->initializationVector = $this->strToHex("12345678");
-        $this->encryptionKey = isset( $this->extConf['secure_encryption_key'] )? $this->extConf['secure_encryption_key'] : NULL;
-        $this->encryptionMethod = isset( $this->extConf['secure_encryption_method'] ) ? $this->extConf['secure_encryption_method'] : NULL;
-        $this->controllerSettings = $this->settings['controllers'][$this->request->getControllerName()]; 
+        $this->encryptionKey = isset($this->extConf['secure_encryption_key']) ? $this->extConf['secure_encryption_key'] : NULL;
+        $this->encryptionMethod = isset($this->extConf['secure_encryption_method']) ? $this->extConf['secure_encryption_method'] : NULL;
+        $this->controllerSettings = $this->settings['controllers'][$this->request->getControllerName()];
         $this->actionSettings = $this->controllerSettings['actions'][$this->request->getControllerActionName()];
         $this->currentPageUid = $GLOBALS['TSFE']->id;
         $this->configurationManager = $this->objectManager->get('TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface');
+
+        DebuggerUtility::var_dump(1);
+        DebuggerUtility::var_dump($this->view);
     }
 
     /**
@@ -173,18 +203,23 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
      * Override this method to solve assign variables common for all actions
      * or prepare the view in another way before the action is called.
      *
-     * @param \TYPO3\CMS\Extbase\Mvc\View\ViewInterface $view
      * @return void
+     *
+     * JB: Removing parent call which is empty and not supported in v12.
+     * TODO v12: this function will still be called in v12, but this parameter which only stucks there because of
+     * TODO v12: the interface definition, should be removed!
      */
     protected function initializeView(\TYPO3\CMS\Extbase\Mvc\View\ViewInterface $view)
     {
-        parent::initializeView($view);
         $this->view->assignMultiple(array(
             'controllerSettings' => $this->controllerSettings,
             'actionSettings' => $this->actionSettings,
             'extConf' => $this->extConf,
             'currentPageUid' => $this->currentPageUid
         ));
+
+        DebuggerUtility::var_dump(2);
+        DebuggerUtility::var_dump($this->view);
     }
 
     /**
@@ -195,14 +230,14 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
      */
     public function strToHex($string)
     {
-	    $hex = '';
-	    for ($i=0; $i<strlen($string); $i++) {
-	        $ord = ord($string[$i]);
-	        $hexCode = dechex($ord);
-	        $hex .= substr('0'.$hexCode, -2);
-	    }
-	    return strToUpper($hex);
-	}
+        $hex = '';
+        for ($i = 0; $i < strlen($string); $i++) {
+            $ord = ord($string[$i]);
+            $hexCode = dechex($ord);
+            $hex .= substr('0' . $hexCode, -2);
+        }
+        return strToUpper($hex);
+    }
 
     /**
      * generate subcategories and return category tree
@@ -217,19 +252,18 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
         $subCategories = $this->categoryRepository->getSubCategories($parentID);
         $i = 0;
         foreach ($subCategories as $key => $value) {
-            if(version_compare(TYPO3_version, '9.5.99', '<=')){
-                $catID = $value -> getUid();
-                $catName = $value -> getCategoryname();
+
+            //JB: remove deprecated TYPO3-version comparison
+
+            if ($value['l10n_parent'] != 0) {
+                $categoryTree[$key]['localized_uid'] = $value['uid'];
+                $catID = $value['l10n_parent'];
             } else {
-                if($value['l10n_parent'] != 0){
-                    $categoryTree[$key]['localized_uid'] = $value['uid'];
-                    $catID = $value['l10n_parent'];
-                }
-                else {
-                    $catID = $value['uid'];
-                }
-                $catName = $value['categoryname'];
+                $catID = $value['uid'];
             }
+            $catName = $value['categoryname'];
+
+
             $categoryTree[$key]['id'] = $catID;
             $categoryTree[$key]['title'] = $catName;
 
@@ -245,7 +279,7 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
 
     /**
      * function for structured file result
-     * 
+     *
      * @param $fileObject array
      * @param $showPreview boolean
      * @param $allowDirectLinkDownlod boolean
@@ -263,18 +297,19 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
             if ($value instanceof \TYPO3\CMS\Core\Resource\File) {
                 $key = $i++;
                 $fileProperty = $value->getProperties();
-                $response[$key]['id']  = (int)$fileProperty['uid'];
+                $response[$key]['id'] = (int)$fileProperty['uid'];
                 $response[$key]['title'] = (!empty($fileProperty['title'])) ? $fileProperty['title'] : $value->getNameWithoutExtension();
-                $response[$key]['size']  = $this -> formatBytes($fileProperty['size']);
+                $response[$key]['size'] = $this->formatBytes($fileProperty['size']);
                 $response[$key]['fileType'] = strtoupper($fileProperty['extension']);
                 $response[$key]['extension'] = $fileProperty['extension'];
-                $response[$key]['dataType'] = ($fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype'] !=0 && $fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype'] != NULL )?explode(',', $fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype']):array();
-                $response[$key]['categories']   = ($fileProperty['tx_pitsdownloadcenter_domain_model_download_category'] !=0 && $fileProperty['tx_pitsdownloadcenter_domain_model_download_category'] != NULL )?explode(',', $fileProperty['tx_pitsdownloadcenter_domain_model_download_category']):array();
+                $response[$key]['dataType'] = ($fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype'] != 0 && $fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype'] != NULL) ? explode(',', $fileProperty['tx_pitsdownloadcenter_domain_model_download_filetype']) : array();
+                $response[$key]['categories'] = ($fileProperty['tx_pitsdownloadcenter_domain_model_download_category'] != 0 && $fileProperty['tx_pitsdownloadcenter_domain_model_download_category'] != NULL) ? explode(',', $fileProperty['tx_pitsdownloadcenter_domain_model_download_category']) : array();
 
                 // for preview image
                 if ($showPreview) {
                     $processed = $this->processImage($value, $pImgWidth, $pImgHeight);
-                    $response[$key]['imageUrl'] = ($processed == '' || !file_exists($processed)) ? $this->request->getBaseUri() .'typo3conf/ext/pits_downloadcenter/Resources/Public/Icons/noimage.jpg' : $this->request->getBaseUri() . $processed;
+
+                    $response[$key]['imageUrl'] = ($processed == '' || !file_exists($processed)) ? $this->getBaseUrl() . 'typo3conf/ext/pits_downloadcenter/Resources/Public/Icons/noimage.jpg' : $this->getBaseUrl() . $processed;
                 }
 
                 // check force download or direct download
@@ -283,8 +318,8 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
                     $file_uid_secure = base64_encode(
                         openssl_encrypt($fileProperty['uid'],
                             $this->encryptionMethod,
-                            $this->encryptionKey ,
-                            TRUE ,
+                            $this->encryptionKey,
+                            TRUE,
                             $this->initializationVector
                         )
                     );
@@ -303,8 +338,9 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
                     $response[$key]['url'] = $response[$key]['downloadUrl'];
                     // $this->redirectToUri($response[$key]['url'], 0, 404);
                 } else {
-                    $response[$key]['url'] = $this->request->getBaseUri() . $value->getPublicUrl();
-                    $response[$key]['downloadUrl']= $this->request->getBaseUri() . $value->getPublicUrl();
+                    $baseUrl = $this->getBaseUrl();
+                    $response[$key]['url'] = $baseUrl . $value->getPublicUrl();
+                    $response[$key]['downloadUrl'] = $baseUrl . $value->getPublicUrl();
                 }
             }
         }
@@ -324,8 +360,8 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     {
         $cObj = $this->configurationManager->getContentObject();
         $response = $cObj->cObjGetSingle('IMG_RESOURCE', array(
-            'file.'=>array('treatAsReference'=>1, 'width'=>$size_w, 'height'=>$size_h ),
-            'file' => $fileObj->getUid()
+                'file.' => array('treatAsReference' => 1, 'width' => $size_w, 'height' => $size_h),
+                'file' => $fileObj->getUid()
             )
         );
         return $response;
@@ -341,8 +377,8 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     {
         $response = array();
         foreach ($fileTypesObject as $key => $value) {
-            $response[$key]['id']  =   $value->getUid();
-            $response[$key]['title']  =   $value->getFiletype();
+            $response[$key]['id'] = $value->getUid();
+            $response[$key]['title'] = $value->getFiletype();
         }
         return $response;
     }

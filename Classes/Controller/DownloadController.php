@@ -30,6 +30,7 @@ use PITS\PitsDownloadcenter\Handlers\ContentTypeHandler;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 
 /**
  * DownloadController
@@ -48,6 +49,11 @@ class DownloadController extends AbstractController
      * @var integer
      */
     protected $typeNumConstant = null;
+
+
+
+
+
 
     /**
      * initialize Action
@@ -80,15 +86,23 @@ class DownloadController extends AbstractController
         }
         $basePath = $storageConfiguration['basePath'];
 
+
+
         // Stop Execution if the path selected is fileadmin
         // this is intentionally done because we dont want to show all the default
         // FAL layer files to frontend
         $isValid = ( $basePath === "fileadmin/" ) ? FALSE : TRUE;
         $showPreview = ( $config['showthumbnail'] == 1 ) ? TRUE : FALSE;
 
+
         // Check Starts Here
         if($isValid) {
-            $baseUrl = $this->request->getBaseUri();
+            //JB: Substitution for '$this->request->getBaseUri()', which is deprecated
+            $baseUrl = $this->getBaseUrl();
+
+
+
+
             // uri for JSON service
             //if default language contentIdentifier = uid else _LOCALIZED_UID to get settings of translated plugin in ajax action
             $cObject = $this->configurationManager->getContentObject()->data;
@@ -101,7 +115,7 @@ class DownloadController extends AbstractController
                 ->setTargetPageUid($this->currentPageUid)
                 ->setCreateAbsoluteUri(TRUE)
                 ->setArguments($urlArguments)
-                ->setUseCacheHash(false)
+                // ->setUseCacheHash(false) | JB: Function no longer implemented in URI builder
                 ->build();
             $filePreview = ($config['showFileIconPreview'] == 1) ? TRUE : FALSE;
             $this->view->assign('baseURL' , $baseUrl);
@@ -171,7 +185,10 @@ class DownloadController extends AbstractController
 
         // setting response variables
         $this->defaultViewObjectName = \TYPO3\CMS\Extbase\Mvc\View\JsonView::class;
-        $baseUrl = $this->request->getBaseUri();
+
+        //JB: Substitution for '$this->request->getBaseUri()', which is deprecated
+        $baseUrl = $this->getBaseUrl();
+
         $response = array(
             'baseURL' => $baseUrl ,
             'files' => $files,
@@ -207,36 +224,33 @@ class DownloadController extends AbstractController
             $storageRepository  = $this->storageRepository->findByUid($storageUid);
             $sConfig = $storageRepository->getConfiguration();
             $fileName = (isset($fileDetails['name'])) ? $fileDetails['name'] : NULL;
-            if(version_compare(TYPO3_version, '8.7.99', '<=')){
-                $file = realpath(PATH_site.$sConfig['basePath'].$fileIdentifier);             
-            }
-            else{
-                $file = realpath(Environment::getPublicPath() . '/'.$sConfig['basePath'].$fileIdentifier);
-            }
+
+
+            //JB: remove deprecated TYPO3-version comparison
+            $file = realpath(Environment::getPublicPath() . '/'.$sConfig['basePath'].$fileIdentifier);
+
             $fileObject = $storageRepository->getFile( $fileIdentifier );
-            if(version_compare(TYPO3_version, '9.5.99', '<=')){
-                $sys_language_uid = $GLOBALS['TSFE']->sys_language_uid;
-            }
-            else{
-                $siteLanguageObj = $GLOBALS['TYPO3_REQUEST']->getAttribute('language');
-                $sys_language_uid = $siteLanguageObj->getLanguageId();
-            }
+
+            //JB: remove deprecated TYPO3-version comparison
+            $siteLanguageObj = $GLOBALS['TYPO3_REQUEST']->getAttribute('language');
+            $sys_language_uid = $siteLanguageObj->getLanguageId();
+
+
             $checkTranslations = $this->downloadRepository->checkTranslations($fileObject , $sys_language_uid);
             
             if( $checkTranslations ) {
                 $file_uid = isset($checkTranslations['uid_local']) ? $checkTranslations['uid_local'] : NULL;
                 if(!is_null($file_uid)) {
-                    $resourceFactory = \TYPO3\CMS\Core\Resource\ResourceFactory::getInstance();
-                    $fileObj = $resourceFactory->getFileObject($file_uid);
+
+                    //JB: Use dependency injected resourceFactory
+                    $fileObj = $this->resourceFactory->getFileObject($file_uid);
                     $storConf = $fileObj->getStorage()->getConfiguration();
                     $file_identifier = $fileObj->getIdentifier();
                     if ($file_identifier && !empty( $file_identifier )) {
-                        if(version_compare(TYPO3_version, '8.7.99', '<=')){
-                            $filePath = PATH_site.$storConf['basePath'].$file_identifier;
-                        }
-                        else {
-                            $filePath = Environment::getPublicPath(). '/'.$storConf['basePath'].$file_identifier;
-                        }
+
+                        //JB: remove deprecated TYPO3-version comparison
+                        $filePath = Environment::getPublicPath(). '/'.$storConf['basePath'].$file_identifier;
+
                         if (!empty($filePath) && is_file($filePath)){
                             $file = $filePath;
                             $fileName = basename($file);
