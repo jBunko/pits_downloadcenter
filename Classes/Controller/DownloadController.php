@@ -30,7 +30,6 @@ use PITS\PitsDownloadcenter\Handlers\ContentTypeHandler;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Core\Environment;
-use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 
 /**
  * DownloadController
@@ -99,8 +98,6 @@ class DownloadController extends AbstractController
         if($isValid) {
             //JB: Substitution for '$this->request->getBaseUri()', which is deprecated
             $baseUrl = $this->getBaseUrl();
-
-
 
 
             // uri for JSON service
@@ -174,6 +171,8 @@ class DownloadController extends AbstractController
             $recursive = TRUE
         );
 
+
+
         // basePath
         $basePath = $storageConfiguration['basePath'];
         $files = $this->generateFiles(
@@ -182,6 +181,7 @@ class DownloadController extends AbstractController
             $allowDirectLinkDownload,
             $basePath
         );
+
 
         // setting response variables
         $this->defaultViewObjectName = \TYPO3\CMS\Extbase\Mvc\View\JsonView::class;
@@ -265,7 +265,7 @@ class DownloadController extends AbstractController
                 $headers = array(
                     'Pragma'                    => 'public', 
                     'Expires'                   => 0, 
-                    'Cache-Control'             => 'must-revalidate, post-check=0, pre-check=0',
+                    //'Cache-Control'             => 'must-revalidate, post-check=0, pre-check=0',
                     'Cache-Control'             => 'public',
                     'Content-Description'       => 'File Transfer',
                     'Content-Type'              => $cType,
@@ -273,9 +273,11 @@ class DownloadController extends AbstractController
                     'Content-Transfer-Encoding' => 'binary', 
                     'Content-Length'            => $fileLen         
                 );
-                foreach($headers as $header => $data)
-                $this->response->setHeader($header, $data); 
-                $this->response->sendHeaders();                 
+
+                foreach($headers as $header => $data) {
+                    //JB: Object '$this->response' does not exist anymore. Set header via good ol' fashioned php
+                    header($header . ': ' . $data);
+                }
                 @readfile($file);die;
             }
         }

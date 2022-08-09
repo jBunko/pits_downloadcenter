@@ -34,7 +34,6 @@ use TYPO3\CMS\Core\Resource\ResourceFactory;
 use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
-use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 
 /**
  * AbstractController
@@ -307,7 +306,15 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
                 if ($showPreview) {
                     $processed = $this->processImage($value, $pImgWidth, $pImgHeight);
 
-                    $response[$key]['imageUrl'] = ($processed == '' || !file_exists($processed)) ? $this->getBaseUrl() . 'typo3conf/ext/pits_downloadcenter/Resources/Public/Icons/noimage.jpg' : $this->getBaseUrl() . $processed;
+                    $response[$key]['imageUrl'] =
+                        // JB: Point on processed file through server root for file check since "file_exists"
+                        // JB: won't work accordingly if you're hosting your TYPO3-Instance on a subfolder of your domain
+                        // JB: eg - "www.dont-want-more-ssl-certificates.com/devroot/typo3"
+                        ($processed == '' || !file_exists($_SERVER['DOCUMENT_ROOT'] . $processed)) ?
+                            $this->getBaseUrl() . 'typo3conf/ext/pits_downloadcenter/Resources/Public/Icons/noimage.jpg' :
+                            // JB: On the other hand, the processed file string begins with the subfolder, so the domain needs to be prepended
+                            // JB: Not sure if this will break in future updates
+                            $GLOBALS['TYPO3_REQUEST']->getAttribute('normalizedParams')->getRequestHost() . $processed;
                 }
 
                 // check force download or direct download
@@ -357,11 +364,18 @@ abstract class AbstractController extends \TYPO3\CMS\Extbase\Mvc\Controller\Acti
     public function processImage($fileObj, $size_w, $size_h)
     {
         $cObj = $this->configurationManager->getContentObject();
-        $response = $cObj->cObjGetSingle('IMG_RESOURCE', array(
-                'file.' => array('treatAsReference' => 1, 'width' => $size_w, 'height' => $size_h),
+        $response = $cObj->cObjGetSingle('IMG_RESOURCE', [
+                'file.' => [
+                    'treatAsReference' => 1,
+                    'width' => $size_w,
+                    'height' => $size_h
+                ],
                 'file' => $fileObj->getUid()
-            )
+            ]
         );
+
+
+
         return $response;
     }
 
