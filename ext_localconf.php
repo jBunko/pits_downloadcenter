@@ -7,7 +7,7 @@ if (!defined('TYPO3_MODE')) {
 	'PITS.pitsDownloadcenter',
 	'Pitsdownloadcenter',
 	array(
-		'Download' => 'list, show , forceDownload '
+        PITS\PitsDownloadcenter\Controller\DownloadController::class => 'list, show , forceDownload '
 		
 	),
 	// non-cacheable actions
